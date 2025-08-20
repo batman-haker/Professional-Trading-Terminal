@@ -5,6 +5,9 @@ Version: 2.0 | Lines: 1500+
 """
 
 import streamlit as st
+st.set_page_config(layout="wide", initial_sidebar_state="expanded")
+st.sidebar.write("🧪 Sidebar działa?")  # mały „znacznik” – powinien się pokazać
+
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
