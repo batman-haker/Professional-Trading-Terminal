@@ -27,7 +27,7 @@ st.set_page_config(
     page_title="Terminal Pro | Institutional Trading Platform",
     page_icon="🏛️",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
     menu_items={
         'Get Help': 'https://github.com/yourusername/trading-terminal',
         'Report a bug': 'https://github.com/yourusername/trading-terminal/issues',
@@ -87,9 +87,9 @@ st.markdown("""
     }
     
     /* Hide Streamlit Default Elements */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
+    #MainMenu {visibility: visible;}
+    footer {visibility: visible;}
+    header {visibility: visible;}
     
     /* Professional Header */
     .main-header {
@@ -1666,206 +1666,318 @@ with main_tabs[0]:
 
 # ================== CHARTS TAB ==================
 with main_tabs[1]:
-   # Sidebar for chart settings
-   with st.sidebar:
-       st.markdown("### 📊 Chart Settings")
-       
-       # Ticker selection
-       ticker_input = st.text_input("Enter Symbol", value=st.session_state.selected_ticker)
-       st.session_state.selected_ticker = ticker_input.upper()
-       
-       # Quick ticker selection
-       st.markdown("#### Popular Tickers")
-       
-       ticker_categories = {
-           "Tech Giants": ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA"],
-           "Finance": ["JPM", "BAC", "GS", "MS", "WFC", "C"],
-           "Healthcare": ["JNJ", "UNH", "PFE", "LLY", "ABBV", "TMO"],
-           "Energy": ["XOM", "CVX", "COP", "SLB", "OXY", "PSX"],
-           "Crypto": ["BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD"],
-           "Index": ["SPY", "QQQ", "DIA", "IWM", "VOO"]
-       }
-       
-       category = st.selectbox("Category", list(ticker_categories.keys()))
-       ticker_cols = st.columns(3)
-       for i, ticker in enumerate(ticker_categories[category]):
-           with ticker_cols[i % 3]:
-               if st.button(ticker, key=f"ticker_{ticker}"):
-                   st.session_state.selected_ticker = ticker
-                   st.rerun()
-       
-       st.markdown("---")
-       
-       # Time period and interval
-       col1, col2 = st.columns(2)
-       with col1:
-           period = st.selectbox(
-               "Period",
-               ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "ytd", "max"],
-               index=5
-           )
-       
-       with col2:
-           interval = st.selectbox(
-               "Interval",
-               ["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"],
-               index=5
-           )
-       
-       # Chart type
-       chart_type = st.selectbox(
-           "Chart Type",
-           ["candlestick", "line", "area", "heikin_ashi"],
-           format_func=lambda x: x.replace('_', ' ').title()
-       )
-       
-       # Technical indicators
-       st.markdown("#### Technical Indicators")
-       
-       indicators = []
-       
-       # Moving Averages
-       with st.expander("Moving Averages"):
-           col1, col2 = st.columns(2)
-           with col1:
-               if st.checkbox("SMA 20"):
-                   indicators.append("SMA_20")
-               if st.checkbox("SMA 50"):
-                   indicators.append("SMA_50")
-               if st.checkbox("SMA 200"):
-                   indicators.append("SMA_200")
-           with col2:
-               if st.checkbox("EMA 12"):
-                   indicators.append("EMA_12")
-               if st.checkbox("EMA 26"):
-                   indicators.append("EMA_26")
-               if st.checkbox("EMA 50"):
-                   indicators.append("EMA_50")
-       
-       # Oscillators
-       with st.expander("Oscillators"):
-           if st.checkbox("RSI"):
-               indicators.append("RSI")
-           if st.checkbox("MACD"):
-               indicators.append("MACD")
-           if st.checkbox("MFI"):
-               indicators.append("MFI")
-       
-       # Bands and Channels
-       with st.expander("Bands & Channels"):
-           if st.checkbox("Bollinger Bands"):
-               indicators.append("Bollinger Bands")
-           if st.checkbox("Support/Resistance"):
-               indicators.append("Support/Resistance")
-       
-       # Volume
-       if st.checkbox("Show Volume"):
-           indicators.append("Volume")
-       
-       # Drawing tools placeholder
-       st.markdown("#### Drawing Tools")
-       st.info("Drawing tools coming soon in v2.1")
-   
-   # Main chart area
-   ticker = st.session_state.selected_ticker
-   
-   # Fetch data
-   data, info = fetch_stock_data(ticker, period, interval)
-   
-   if data is not None and not data.empty:
-       # Company info header
-       col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
-       
-       current_price = data['Close'].iloc[-1]
-       prev_close = data['Close'].iloc[-2] if len(data) > 1 else current_price
-       change = current_price - prev_close
-       change_pct = (change / prev_close * 100) if prev_close else 0
-       
-       with col1:
-           st.markdown(f"""
-           <div class="metric-card">
-               <div class="metric-label">SYMBOL</div>
-               <div style="font-size: 1.2rem; font-weight: 700;">{ticker}</div>
-           </div>
-           """, unsafe_allow_html=True)
-       
-       with col2:
-           company_name = info.get('longName', ticker) if info else ticker
-           st.markdown(f"""
-           <div class="metric-card">
-               <div class="metric-label">COMPANY</div>
-               <div style="font-size: 0.9rem;">{company_name[:20]}</div>
-           </div>
-           """, unsafe_allow_html=True)
-       
-       with col3:
-           change_color = "#00d68f" if change >= 0 else "#ff3d71"
-           arrow = "↑" if change >= 0 else "↓"
-           st.markdown(f"""
-           <div class="metric-card">
-               <div class="metric-label">PRICE</div>
-               <div class="metric-value" style="font-size: 1.3rem;">${current_price:.2f}</div>
-               <div class="metric-change" style="color: {change_color};">
-                   {arrow} {abs(change):.2f} ({abs(change_pct):.2f}%)
-               </div>
-           </div>
-           """, unsafe_allow_html=True)
-       
-       with col4:
-           st.markdown(f"""
-           <div class="metric-card">
-               <div class="metric-label">DAY HIGH</div>
-               <div style="font-size: 1.1rem;">${data['High'].iloc[-1]:.2f}</div>
-           </div>
-           """, unsafe_allow_html=True)
-       
-       with col5:
-           st.markdown(f"""
-           <div class="metric-card">
-               <div class="metric-label">DAY LOW</div>
-               <div style="font-size: 1.1rem;">${data['Low'].iloc[-1]:.2f}</div>
-           </div>
-           """, unsafe_allow_html=True)
-       
-       with col6:
-           volume = data['Volume'].iloc[-1]
-           st.markdown(f"""
-           <div class="metric-card">
-               <div class="metric-label">VOLUME</div>
-               <div style="font-size: 1.1rem;">{volume:,.0f}</div>
-           </div>
-           """, unsafe_allow_html=True)
-       
-       with col7:
-           if info:
-               mkt_cap = info.get('marketCap', 0)
-               mkt_cap_str = format_large_number(mkt_cap)
-               st.markdown(f"""
-               <div class="metric-card">
-                   <div class="metric-label">MARKET CAP</div>
-                   <div style="font-size: 1.1rem;">{mkt_cap_str}</div>
-               </div>
-               """, unsafe_allow_html=True)
-       
-       with col8:
-           if info:
-               pe_ratio = info.get('trailingPE', 0)
-               st.markdown(f"""
-               <div class="metric-card">
-                   <div class="metric-label">P/E RATIO</div>
-                   <div style="font-size: 1.1rem;">{pe_ratio:.2f}</div>
-               </div>
-               """, unsafe_allow_html=True)
-       
-       st.markdown("<br>", unsafe_allow_html=True)
-       
-       # Main chart
-       st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-       fig = create_professional_chart(data, ticker, chart_type, indicators, st.session_state.theme)
-       st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': True})
-       st.markdown('</div>', unsafe_allow_html=True)
-   else:
-       st.error(f"Unable to fetch data for {ticker}")
+    # Sidebar for chart settings
+
+    st.markdown("### 📊 Chart Settings")
+
+    # Ticker selection
+    ticker_input = st.text_input("Enter Symbol", value=st.session_state.selected_ticker,
+                                 help="Wprowadź symbol spółki (np. AAPL, WSE:PCO)")
+    st.session_state.selected_ticker = ticker_input.upper()
+
+    # Extended ticker categories with exchange info
+    st.markdown("#### 🌍 Popular Tickers")
+
+    ticker_categories = {
+        "🇺🇸 US Tech Giants": {
+            "AAPL": "Apple Inc - NASDAQ",
+            "MSFT": "Microsoft Corp - NASDAQ",
+            "GOOGL": "Alphabet Inc - NASDAQ",
+            "AMZN": "Amazon Inc - NASDAQ",
+            "META": "Meta Platforms - NASDAQ",
+            "NVDA": "NVIDIA Corp - NASDAQ"
+        },
+        "🇺🇸 US Finance": {
+            "JPM": "JPMorgan Chase - NYSE",
+            "BAC": "Bank of America - NYSE",
+            "GS": "Goldman Sachs - NYSE",
+            "MS": "Morgan Stanley - NYSE",
+            "WFC": "Wells Fargo - NYSE",
+            "C": "Citigroup - NYSE"
+        },
+        "🇵🇱 Warsaw Stock Exchange": {
+            "PCO": "Pepco Group - WSE:PCO",
+            "PKN": "PKN Orlen - WSE:PKN",
+            "PEO": "Bank Pekao - WSE:PEO",
+            "KGH": "KGHM - WSE:KGH",
+            "LPP": "LPP - WSE:LPP",
+            "CCC": "CCC - WSE:CCC",
+            "CDR": "CD Projekt - WSE:CDR",
+            "ALE": "Allegro - WSE:ALE"
+        },
+        "🇩🇪 Frankfurt (XETRA)": {
+            "SAP": "SAP SE - FRA:SAP",
+            "SIE": "Siemens - FRA:SIE",
+            "ASME": "ASML - FRA:ASME",
+            "ADS": "Adidas - FRA:ADS",
+            "BAS": "BASF - FRA:BAS",
+            "BMW": "BMW - FRA:BMW"
+        },
+        "🇬🇧 London Stock Exchange": {
+            "LLOY": "Lloyds Banking - LSE:LLOY",
+            "BP": "BP Plc - LSE:BP",
+            "SHELL": "Shell - LSE:SHELL",
+            "VODAFONE": "Vodafone - LSE:VOD",
+            "TESCO": "Tesco - LSE:TSCO",
+            "UNILEVER": "Unilever - LSE:ULVR"
+        },
+        "💰 Crypto": {
+            "BTC-USD": "Bitcoin - Cryptocurrency",
+            "ETH-USD": "Ethereum - Cryptocurrency",
+            "BNB-USD": "Binance Coin - Cryptocurrency",
+            "SOL-USD": "Solana - Cryptocurrency",
+            "ADA-USD": "Cardano - Cryptocurrency",
+            "DOT-USD": "Polkadot - Cryptocurrency"
+        },
+        "📈 ETFs & Indices": {
+            "SPY": "SPDR S&P 500 ETF - NYSE",
+            "QQQ": "Invesco QQQ ETF - NASDAQ",
+            "DIA": "SPDR Dow Jones ETF - NYSE",
+            "IWM": "iShares Russell 2000 - NYSE",
+            "VTI": "Vanguard Total Stock - NYSE",
+            "VOO": "Vanguard S&P 500 - NYSE"
+        }
+    }
+
+    category = st.selectbox("Category", list(ticker_categories.keys()))
+
+    # Display tickers in current category with tooltips
+    st.markdown("**Available Tickers:**")
+
+    # Create columns for ticker buttons
+    tickers_in_category = list(ticker_categories[category].keys())
+    cols_per_row = 2
+
+    for i in range(0, len(tickers_in_category), cols_per_row):
+        ticker_cols = st.columns(cols_per_row)
+
+        for j, ticker in enumerate(tickers_in_category[i:i+cols_per_row]):
+            with ticker_cols[j]:
+                company_info = ticker_categories[category][ticker]
+
+                # Button with tooltip info
+                if st.button(ticker, key=f"ticker_{ticker}",
+                            help=f"📊 {company_info}",
+                            use_container_width=True):
+                    # Handle special cases for Polish stocks
+                    if category == "🇵🇱 Warsaw Stock Exchange":
+                        # For Polish stocks, use the ticker as is (Yahoo Finance format)
+                        st.session_state.selected_ticker = ticker
+                    else:
+                        st.session_state.selected_ticker = ticker
+                    st.rerun()
+
+                # Display company info below button
+                st.markdown(f"""
+                <div style="font-size: 0.7rem; color: #8b92a8; text-align: center; 
+                            margin-bottom: 0.5rem; line-height: 1.2;">
+                    {company_info.split(' - ')[0][:20]}...
+                </div>
+                """, unsafe_allow_html=True)
+
+    # Quick search for more tickers
+    st.markdown("---")
+    st.markdown("#### 🔍 Quick Exchange Guide")
+
+    exchange_info = st.expander("📚 Ticker Format Examples", expanded=False)
+    with exchange_info:
+        st.markdown("""
+        **Polish Stocks (WSE):**
+        - Pepco: `PCO` 
+        - PKN Orlen: `PKN`
+        - CD Projekt: `CDR`
+        - Allegro: `ALE`
+        
+        **US Stocks:**
+        - Apple: `AAPL`
+        - Microsoft: `MSFT`
+        - Tesla: `TSLA`
+        
+        **Crypto:**
+        - Bitcoin: `BTC-USD`
+        - Ethereum: `ETH-USD`
+        
+        **European:**
+        - SAP: `SAP` (Frankfurt)
+        - ASML: `ASML` (Amsterdam)
+        
+        **Indices:**
+        - S&P 500: `^GSPC`
+        - WIG20: `^WIG20`
+        """)
+
+    st.markdown("---")
+
+    # Time period and interval
+    col1, col2 = st.columns(2)
+    with col1:
+        period = st.selectbox(
+            "Period",
+            ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "ytd", "max"],
+            index=5
+        )
+
+    with col2:
+        interval = st.selectbox(
+            "Interval",
+            ["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"],
+            index=5
+        )
+
+    # Chart type
+    chart_type = st.selectbox(
+        "Chart Type",
+        ["candlestick", "line", "area", "heikin_ashi"],
+        format_func=lambda x: x.replace('_', ' ').title()
+    )
+
+    # Technical indicators
+    st.markdown("#### Technical Indicators")
+
+    indicators = []
+
+    # Moving Averages
+    with st.expander("Moving Averages"):
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.checkbox("SMA 20"):
+                indicators.append("SMA_20")
+            if st.checkbox("SMA 50"):
+                indicators.append("SMA_50")
+            if st.checkbox("SMA 200"):
+                indicators.append("SMA_200")
+        with col2:
+            if st.checkbox("EMA 12"):
+                indicators.append("EMA_12")
+            if st.checkbox("EMA 26"):
+                indicators.append("EMA_26")
+            if st.checkbox("EMA 50"):
+                indicators.append("EMA_50")
+
+    # Oscillators
+    with st.expander("Oscillators"):
+        if st.checkbox("RSI"):
+            indicators.append("RSI")
+        if st.checkbox("MACD"):
+            indicators.append("MACD")
+        if st.checkbox("MFI"):
+            indicators.append("MFI")
+
+    # Bands and Channels
+    with st.expander("Bands & Channels"):
+        if st.checkbox("Bollinger Bands"):
+            indicators.append("Bollinger Bands")
+        if st.checkbox("Support/Resistance"):
+            indicators.append("Support/Resistance")
+
+    # Volume
+    if st.checkbox("Show Volume"):
+        indicators.append("Volume")
+
+    # Drawing tools placeholder
+    st.markdown("#### Drawing Tools")
+    st.info("Drawing tools coming soon in v2.1")
+
+# Main chart area
+ticker = st.session_state.selected_ticker
+
+# Fetch data
+data, info = fetch_stock_data(ticker, period, interval)
+
+if data is not None and not data.empty:
+    # Company info header
+    col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
+
+    current_price = data['Close'].iloc[-1]
+    prev_close = data['Close'].iloc[-2] if len(data) > 1 else current_price
+    change = current_price - prev_close
+    change_pct = (change / prev_close * 100) if prev_close else 0
+
+    with col1:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">SYMBOL</div>
+            <div style="font-size: 1.2rem; font-weight: 700;">{ticker}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        company_name = info.get('longName', ticker) if info else ticker
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">COMPANY</div>
+            <div style="font-size: 0.9rem;">{company_name[:20]}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        change_color = "#00d68f" if change >= 0 else "#ff3d71"
+        arrow = "↑" if change >= 0 else "↓"
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">PRICE</div>
+            <div class="metric-value" style="font-size: 1.3rem;">${current_price:.2f}</div>
+            <div class="metric-change" style="color: {change_color};">
+                {arrow} {abs(change):.2f} ({abs(change_pct):.2f}%)
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col4:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">DAY HIGH</div>
+            <div style="font-size: 1.1rem;">${data['High'].iloc[-1]:.2f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col5:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">DAY LOW</div>
+            <div style="font-size: 1.1rem;">${data['Low'].iloc[-1]:.2f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col6:
+        volume = data['Volume'].iloc[-1]
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">VOLUME</div>
+            <div style="font-size: 1.1rem;">{volume:,.0f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col7:
+        if info:
+            mkt_cap = info.get('marketCap', 0)
+            mkt_cap_str = format_large_number(mkt_cap)
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">MARKET CAP</div>
+                <div style="font-size: 1.1rem;">{mkt_cap_str}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    with col8:
+        if info:
+            pe_ratio = info.get('trailingPE', 0)
+            st.markdown(f"""
+            <div class="metric-card">
+                <div class="metric-label">P/E RATIO</div>
+                <div style="font-size: 1.1rem;">{pe_ratio:.2f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Main chart
+    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
+    fig = create_professional_chart(data, ticker, chart_type, indicators, st.session_state.theme)
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': True})
+    st.markdown('</div>', unsafe_allow_html=True)
+else:
+    st.error(f"Unable to fetch data for {ticker}")
 
 # ================== TECHNICAL ANALYSIS TAB ==================
 with main_tabs[2]:
