@@ -1689,7 +1689,7 @@ with search_col1:
     )
     
 with search_col2:
-    if st.button("🔍 Analyze Stock", type="primary", use_container_width=True):
+    if st.button("🔍 Analyze Stock", type="primary", use_container_width=True, key="global_analyze_stock"):
         if new_ticker and new_ticker.strip():
             st.session_state.selected_ticker = new_ticker.upper().strip()
             st.rerun()
@@ -1697,7 +1697,7 @@ with search_col2:
             st.error("Please enter a stock symbol")
             
 with search_col3:
-    if st.button("🎲 Random Stock", use_container_width=True):
+    if st.button("🎲 Random Stock", use_container_width=True, key="global_random_stock"):
         import random
         popular_stocks = [
             # US Tech Giants
@@ -1995,7 +1995,7 @@ with main_tabs[1]:
        )
        
    with search_col2:
-       if st.button("🔍 Analyze", type="primary", use_container_width=True):
+       if st.button("🔍 Analyze", type="primary", use_container_width=True, key="chart_analyze"):
            if new_ticker and new_ticker.strip():
                st.session_state.selected_ticker = new_ticker.upper().strip()
                st.rerun()
@@ -2003,7 +2003,7 @@ with main_tabs[1]:
                st.error("Please enter a stock symbol")
                
    with search_col3:
-       if st.button("🎲 Random Stock", use_container_width=True):
+       if st.button("🎲 Random Stock", use_container_width=True, key="chart_random_stock"):
            import random
            popular_stocks = [
                # US Tech Giants
