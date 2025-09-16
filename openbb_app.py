@@ -1890,8 +1890,95 @@ with main_tabs[1]:
        st.markdown("#### Drawing Tools")
        st.info("Drawing tools coming soon in v2.1")
    
-   # Main chart area
+   # Enhanced Stock Search
+   st.markdown("### 🔍 Stock Search & Analysis")
+   
+   # Create a prominent search section
+   search_col1, search_col2, search_col3 = st.columns([2, 1, 1])
+   
+   with search_col1:
+       # Enhanced search input with examples
+       new_ticker = st.text_input(
+           "Enter Stock Symbol (e.g., AAPL, MSFT, TSLA, NVDA)",
+           value=st.session_state.selected_ticker,
+           placeholder="Type stock symbol...",
+           key="main_ticker_input",
+           help="Enter any stock symbol like AAPL for Apple, GOOGL for Google, etc."
+       )
+       
+   with search_col2:
+       if st.button("🔍 Analyze", type="primary", use_container_width=True):
+           if new_ticker and new_ticker.strip():
+               st.session_state.selected_ticker = new_ticker.upper().strip()
+               st.rerun()
+           else:
+               st.error("Please enter a stock symbol")
+               
+   with search_col3:
+       if st.button("🎲 Random Stock", use_container_width=True):
+           import random
+           popular_stocks = [
+               # US Tech Giants
+               "AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", 
+               # US Market 
+               "SPY", "QQQ", "DIA", "JPM", "JNJ", "WMT",
+               # Polish Stocks (with .WA suffix)
+               "PKN.WA", "PEP.WA", "KGH.WA", "LPP.WA", "CCC.WA", "PLW.WA"
+           ]
+           random_stock = random.choice(popular_stocks)
+           st.session_state.selected_ticker = random_stock
+           st.rerun()
+   
+   # Quick access buttons for popular stocks
+   st.markdown("#### 🚀 Popular Stocks")
+   
+   # US Stocks row
+   st.markdown("**🇺🇸 US Market**")
+   us_col1, us_col2, us_col3, us_col4, us_col5 = st.columns(5)
+   
+   us_tickers = [
+       ("📱", "AAPL", "Apple"),
+       ("🖥️", "MSFT", "Microsoft"), 
+       ("🌐", "GOOGL", "Google"),
+       ("🚗", "TSLA", "Tesla"),
+       ("💎", "NVDA", "NVIDIA")
+   ]
+   
+   for i, (icon, symbol, name) in enumerate(us_tickers):
+       with [us_col1, us_col2, us_col3, us_col4, us_col5][i]:
+           if st.button(f"{icon} {symbol}", key=f"us_{symbol}", use_container_width=True, 
+                       help=f"Analyze {name} ({symbol})"):
+               st.session_state.selected_ticker = symbol
+               st.rerun()
+   
+   # Polish Stocks row  
+   st.markdown("**🇵🇱 Polish Market (WSE)**")
+   pl_col1, pl_col2, pl_col3, pl_col4, pl_col5 = st.columns(5)
+   
+   polish_tickers = [
+       ("🛢️", "PKN.WA", "PKN Orlen"),
+       ("⚡", "PEP.WA", "Pepco Group"), 
+       ("🏦", "PKO.WA", "PKO Bank"),
+       ("👕", "LPP.WA", "LPP"),
+       ("🧮", "CDR.WA", "CD Projekt")
+   ]
+   
+   for i, (icon, symbol, name) in enumerate(polish_tickers):
+       with [pl_col1, pl_col2, pl_col3, pl_col4, pl_col5][i]:
+           if st.button(f"{icon} {symbol}", key=f"pl_{symbol}", use_container_width=True, 
+                       help=f"Analyze {name} ({symbol})"):
+               st.session_state.selected_ticker = symbol
+               st.rerun()
+   
+   # Update ticker if changed
+   if new_ticker and new_ticker.strip().upper() != st.session_state.selected_ticker:
+       st.session_state.selected_ticker = new_ticker.upper().strip()
+   
    ticker = st.session_state.selected_ticker
+   st.markdown("---")
+   
+   # Current selection display
+   st.markdown(f"### 📈 Analyzing: **{ticker}**")
    
    # Fetch data
    data, info = fetch_enhanced_stock_data(ticker, period, with_indicators=True)
