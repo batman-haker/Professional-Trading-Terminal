@@ -17,6 +17,8 @@ import json
 import time
 from typing import Dict, List, Optional, Tuple, Any
 import warnings
+import asyncio
+import aiohttp
 warnings.filterwarnings('ignore')
 
 # ================== CONFIGURATION ==================
@@ -784,6 +786,133 @@ def fetch_stock_data(symbol: str, period: str = '1y', interval: str = '1d') -> T
     except Exception as e:
         st.error(f"Error fetching data for {symbol}: {str(e)}")
         return None, None
+
+# ================== ENHANCED DATA FUNCTIONS (Finance MCP) ==================
+@st.cache_data(ttl=60)
+def fetch_enhanced_stock_data(symbol: str, period: str = '1y', with_indicators: bool = True) -> Tuple[Optional[pd.DataFrame], Optional[Dict]]:
+    """
+    Enhanced stock data fetching with technical indicators and better reliability
+    Falls back to yfinance if enhanced data is unavailable
+    
+    Args:
+        symbol: Stock ticker symbol
+        period: Time period for historical data 
+        with_indicators: Whether to include technical indicators
+    
+    Returns:
+        Tuple of (DataFrame with OHLCV + indicators, Dict with comprehensive stock info)
+    """
+    try:
+        # Primary: Try to get enhanced data (this would use Finance MCP in production)
+        # For now, we'll enhance the yfinance data with better processing and indicators
+        
+        ticker = yf.Ticker(symbol)
+        
+        # Get historical data with appropriate intervals
+        period_mapping = {
+            '1d': {'period': '1d', 'interval': '5m'},
+            '5d': {'period': '5d', 'interval': '15m'}, 
+            '1mo': {'period': '1mo', 'interval': '1h'},
+            '3mo': {'period': '3mo', 'interval': '1d'},
+            '6mo': {'period': '6mo', 'interval': '1d'},
+            '1y': {'period': '1y', 'interval': '1d'},
+            '2y': {'period': '2y', 'interval': '1wk'},
+            '5y': {'period': '5y', 'interval': '1wk'},
+            'max': {'period': 'max', 'interval': '1mo'}
+        }
+        
+        params = period_mapping.get(period, {'period': '1y', 'interval': '1d'})
+        data = ticker.history(period=params['period'], interval=params['interval'])
+        
+        if data.empty:
+            return None, None
+            
+        # Add technical indicators if requested
+        if with_indicators and len(data) > 20:
+            data = add_technical_indicators(data)
+        
+        # Get enhanced stock info
+        info = ticker.info
+        enhanced_info = get_enhanced_stock_info(symbol, info)
+        
+        return data, enhanced_info
+        
+    except Exception as e:
+        st.error(f"Enhanced data fetch failed for {symbol}: {str(e)}")
+        # Fallback to original function
+        return fetch_stock_data(symbol, period)
+
+def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
+    """Add common technical indicators to OHLCV data"""
+    try:
+        # Simple Moving Averages
+        df['SMA_20'] = df['Close'].rolling(window=20).mean()
+        df['SMA_50'] = df['Close'].rolling(window=50).mean()
+        df['SMA_200'] = df['Close'].rolling(window=200).mean()
+        
+        # Exponential Moving Averages  
+        df['EMA_12'] = df['Close'].ewm(span=12).mean()
+        df['EMA_26'] = df['Close'].ewm(span=26).mean()
+        
+        # MACD
+        df['MACD'] = df['EMA_12'] - df['EMA_26']
+        df['MACD_Signal'] = df['MACD'].ewm(span=9).mean()
+        df['MACD_Histogram'] = df['MACD'] - df['MACD_Signal']
+        
+        # RSI
+        delta = df['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        df['RSI'] = 100 - (100 / (1 + rs))
+        
+        # Bollinger Bands
+        bb_period = 20
+        bb_std = 2
+        df['BB_Middle'] = df['Close'].rolling(window=bb_period).mean()
+        bb_std_dev = df['Close'].rolling(window=bb_period).std()
+        df['BB_Upper'] = df['BB_Middle'] + (bb_std_dev * bb_std)
+        df['BB_Lower'] = df['BB_Middle'] - (bb_std_dev * bb_std)
+        
+        # Volume indicators
+        if 'Volume' in df.columns:
+            df['Volume_SMA'] = df['Volume'].rolling(window=20).mean()
+            df['Volume_Ratio'] = df['Volume'] / df['Volume_SMA']
+        
+        return df
+    except Exception as e:
+        st.warning(f"Failed to add technical indicators: {str(e)}")
+        return df
+
+def get_enhanced_stock_info(symbol: str, basic_info: Dict) -> Dict:
+    """Enhance basic stock info with additional metrics"""
+    try:
+        enhanced = basic_info.copy()
+        
+        # Add computed metrics
+        enhanced['symbol'] = symbol
+        enhanced['last_updated'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Financial ratios (if available)
+        if 'trailingPE' in basic_info and 'forwardPE' in basic_info:
+            enhanced['pe_comparison'] = basic_info.get('trailingPE', 0) - basic_info.get('forwardPE', 0)
+        
+        # Market cap category
+        market_cap = basic_info.get('marketCap', 0)
+        if market_cap > 200_000_000_000:
+            enhanced['market_cap_category'] = 'Mega Cap'
+        elif market_cap > 10_000_000_000:
+            enhanced['market_cap_category'] = 'Large Cap'
+        elif market_cap > 2_000_000_000:
+            enhanced['market_cap_category'] = 'Mid Cap'
+        elif market_cap > 300_000_000:
+            enhanced['market_cap_category'] = 'Small Cap'
+        else:
+            enhanced['market_cap_category'] = 'Micro Cap'
+            
+        return enhanced
+    except Exception as e:
+        return basic_info
 
 @st.cache_data(ttl=300)
 def fetch_market_overview() -> Dict[str, Dict[str, float]]:
@@ -1767,7 +1896,7 @@ with main_tabs[1]:
    ticker = st.session_state.selected_ticker
    
    # Fetch data
-   data, info = fetch_stock_data(ticker, period, interval)
+   data, info = fetch_enhanced_stock_data(ticker, period, with_indicators=True)
    
    if data is not None and not data.empty:
        # Company info header
@@ -1869,7 +1998,7 @@ with main_tabs[2]:
    st.markdown(f"### 📊 Technical Analysis - {st.session_state.selected_ticker}")
    
    # Fetch data for analysis
-   data, info = fetch_stock_data(st.session_state.selected_ticker, '1y', '1d')
+   data, info = fetch_enhanced_stock_data(st.session_state.selected_ticker, '1y', with_indicators=True)
    
    if data is not None and not data.empty:
        data = calculate_technical_indicators(data)
@@ -2166,7 +2295,7 @@ with main_tabs[3]:
            st.markdown("### Call Options")
            
            # Filter options
-           data, info = fetch_stock_data(st.session_state.selected_ticker, '1d', '1d')
+           data, info = fetch_enhanced_stock_data(st.session_state.selected_ticker, '1d', with_indicators=True)
            if data is not None:
                current_price = data['Close'].iloc[-1]
                
