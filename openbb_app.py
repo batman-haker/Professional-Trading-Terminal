@@ -19,6 +19,16 @@ from typing import Dict, List, Optional, Tuple, Any
 import warnings
 warnings.filterwarnings('ignore')
 
+# Import our enhanced finance data module
+try:
+    from enhanced_finance_data import enhanced_finance
+    ENHANCED_DATA_AVAILABLE = True
+    print("OK Enhanced Finance Data module loaded successfully")
+except ImportError as e:
+    ENHANCED_DATA_AVAILABLE = False
+    print(f"X Enhanced Finance Data module not available: {e}")
+    print("Using fallback to basic yfinance functionality")
+
 # ================== CONFIGURATION ==================
 st.set_page_config(
     page_title="Terminal Pro | Institutional Trading Platform",
@@ -788,7 +798,7 @@ def fetch_stock_data(symbol: str, period: str = '1y', interval: str = '1d') -> T
 def fetch_enhanced_stock_data(symbol: str, period: str = '1y', with_indicators: bool = True) -> Tuple[Optional[pd.DataFrame], Optional[Dict]]:
     """
     Enhanced stock data fetching with technical indicators and better reliability
-    Falls back to yfinance if enhanced data is unavailable
+    Uses our enhanced finance module or falls back to basic yfinance
     
     Args:
         symbol: Stock ticker symbol
@@ -799,9 +809,17 @@ def fetch_enhanced_stock_data(symbol: str, period: str = '1y', with_indicators: 
         Tuple of (DataFrame with OHLCV + indicators, Dict with comprehensive stock info)
     """
     try:
-        # Primary: Try to get enhanced data (this would use Finance MCP in production)
-        # For now, we'll enhance the yfinance data with better processing and indicators
+        # Primary: Use our enhanced finance data module
+        if ENHANCED_DATA_AVAILABLE:
+            data, info = enhanced_finance.get_enhanced_stock_data(
+                symbol, 
+                period, 
+                include_advanced_indicators=with_indicators
+            )
+            if data is not None and info is not None:
+                return data, info
         
+        # Fallback: Use basic yfinance
         ticker = yf.Ticker(symbol)
         
         # Get historical data with appropriate intervals
@@ -1011,6 +1029,7 @@ def fetch_options_data(symbol: str) -> Tuple[Optional[pd.DataFrame], Optional[pd
 def fetch_news(symbol: str, limit: int = 10) -> Optional[List[Dict]]:
     """
     Fetch latest news for a given symbol with multiple fallbacks
+    Uses enhanced finance module for better news coverage
    
     Args:
         symbol: Stock ticker symbol
@@ -1020,6 +1039,13 @@ def fetch_news(symbol: str, limit: int = 10) -> Optional[List[Dict]]:
         List of news articles as dictionaries
     """
     try:
+        # Primary: Use enhanced finance module
+        if ENHANCED_DATA_AVAILABLE:
+            news = enhanced_finance.get_enhanced_news(symbol, limit)
+            if news:
+                return news
+        
+        # Fallback: Use basic yfinance
         ticker = yf.Ticker(symbol)
         news = []
         
@@ -1269,6 +1295,16 @@ def fetch_enhanced_market_data(market: str = "SP500") -> Optional[pd.DataFrame]:
     Returns:
         DataFrame with enhanced company data
     """
+    # Primary: Use enhanced finance module
+    if ENHANCED_DATA_AVAILABLE:
+        try:
+            data = enhanced_finance.get_market_overview_enhanced(market)
+            if data is not None and not data.empty:
+                return data
+        except Exception as e:
+            print(f"Enhanced module failed for market data, falling back to basic: {e}")
+    
+    # Fallback: Basic implementation
     if market == "SP500":
         symbols = [
             'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META', 'BRK-B', 'UNH', 'JNJ',
