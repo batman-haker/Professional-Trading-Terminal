@@ -11,7 +11,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import yfinance as yf
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import requests
 import json
 import time
@@ -28,6 +28,16 @@ except ImportError as e:
     ENHANCED_DATA_AVAILABLE = False
     print(f"X Enhanced Finance Data module not available: {e}")
     print("Using fallback to basic yfinance functionality")
+
+# Import our portfolio management module
+try:
+    from portfolio_manager import portfolio_manager, format_currency, format_percentage, get_color_for_pnl
+    PORTFOLIO_MANAGER_AVAILABLE = True
+    print("OK Portfolio Manager module loaded successfully")
+except ImportError as e:
+    PORTFOLIO_MANAGER_AVAILABLE = False
+    print(f"X Portfolio Manager module not available: {e}")
+    print("Using fallback to basic portfolio functionality")
 
 # ================== CONFIGURATION ==================
 st.set_page_config(
@@ -3452,181 +3462,314 @@ with main_tabs[4]:
 
 # ================== PORTFOLIO TAB ==================
 with main_tabs[5]:
-   st.markdown("### 💼 Portfolio Management")
-   
-   # Add position form
-   with st.expander("➕ Add New Position"):
-       col1, col2, col3, col4 = st.columns(4)
-       
-       with col1:
-           add_symbol = st.text_input("Symbol", key="add_pos_symbol")
-       with col2:
-           add_shares = st.number_input("Shares", min_value=0.0, step=1.0, key="add_pos_shares")
-       with col3:
-           add_cost = st.number_input("Avg Cost", min_value=0.0, step=0.01, key="add_pos_cost")
-       with col4:
-           st.markdown("<br>", unsafe_allow_html=True)
-           if st.button("Add Position", use_container_width=True):
-               if add_symbol and add_shares > 0 and add_cost > 0:
-                   # Fetch current price
-                   ticker = yf.Ticker(add_symbol.upper())
-                   hist = ticker.history(period='1d')
-                   if not hist.empty:
-                       current_price = hist['Close'].iloc[-1]
-                       st.session_state.portfolio[add_symbol.upper()] = {
-                           'shares': add_shares,
-                           'avg_cost': add_cost,
-                           'current_price': current_price
-                       }
-                       st.success(f"Added {add_shares} shares of {add_symbol.upper()} to portfolio")
-                       st.rerun()
-   
-   # Portfolio overview
-   if st.session_state.portfolio:
-       # Calculate portfolio metrics
-       metrics = calculate_portfolio_metrics(st.session_state.portfolio)
-       
-       # Display metrics
-       col1, col2, col3, col4, col5, col6 = st.columns(6)
-       
-       with col1:
-           st.metric("Total Value", format_large_number(metrics['total_value']))
-       
-       with col2:
-           pl_color = "#00d68f" if metrics['total_pl'] >= 0 else "#ff3d71"
-           st.metric("Total P&L", 
-                    f"{format_large_number(abs(metrics['total_pl']))}",
-                    f"{metrics['total_pl_pct']:+.2f}%")
-       
-       with col3:
-           st.metric("Total Cost", format_large_number(metrics['total_cost']))
-       
-       with col4:
-           st.metric("Positions", len(st.session_state.portfolio))
-       
-       with col5:
-           if metrics['best_performer']:
-               st.metric("Best Performer", 
-                        metrics['best_performer'][0],
-                        f"{metrics['best_performer'][1]:+.2f}%")
-       
-       with col6:
-           if metrics['worst_performer']:
-               st.metric("Worst Performer",
-                        metrics['worst_performer'][0],
-                        f"{metrics['worst_performer'][1]:+.2f}%")
-       
-       # Portfolio holdings table
-       st.markdown("### 📊 Current Holdings")
-       
-       portfolio_data = []
-       for symbol, position in st.session_state.portfolio.items():
-           # Update current price
-           try:
-               ticker = yf.Ticker(symbol)
-               hist = ticker.history(period='1d')
-               if not hist.empty:
-                   current_price = hist['Close'].iloc[-1]
-                   position['current_price'] = current_price
-           except:
-               current_price = position.get('current_price', position['avg_cost'])
-           
-           market_value = position['shares'] * current_price
-           cost_basis = position['shares'] * position['avg_cost']
-           pl = market_value - cost_basis
-           pl_pct = (pl / cost_basis * 100) if cost_basis > 0 else 0
-           
-           portfolio_data.append({
-               'Symbol': symbol,
-               'Shares': position['shares'],
-               'Avg Cost': position['avg_cost'],
-               'Current Price': current_price,
-               'Market Value': market_value,
-               'Cost Basis': cost_basis,
-               'P&L': pl,
-               'P&L %': pl_pct,
-               'Weight %': (market_value / metrics['total_value'] * 100) if metrics['total_value'] > 0 else 0
-           })
-       
-       portfolio_df = pd.DataFrame(portfolio_data)
-       portfolio_df = portfolio_df.sort_values('Market Value', ascending=False)
-       
-       # Display with formatting
-       st.dataframe(
-           portfolio_df.style.format({
-               'Shares': '{:.0f}',
-               'Avg Cost': '${:.2f}',
-               'Current Price': '${:.2f}',
-               'Market Value': '${:,.2f}',
-               'Cost Basis': '${:,.2f}',
-               'P&L': '${:+,.2f}',
-               'P&L %': '{:+.2f}%',
-               'Weight %': '{:.1f}%'
-           }).apply(lambda x: ['background-color: rgba(0, 214, 143, 0.1)' if x['P&L'] > 0 
-                              else 'background-color: rgba(255, 61, 113, 0.1)' if x['P&L'] < 0
-                              else '' for _ in x], axis=1),
-           use_container_width=True,
-           hide_index=True
-       )
-       
-       # Portfolio allocation chart
-       st.markdown("### 📊 Portfolio Allocation")
-       
-       col1, col2 = st.columns(2)
-       
-       with col1:
-           # Pie chart
-           fig = go.Figure(data=[go.Pie(
-               labels=portfolio_df['Symbol'],
-               values=portfolio_df['Market Value'],
-               hole=0.4,
-               marker=dict(colors=px.colors.qualitative.Set3)
-           )])
-           
-           fig.update_layout(
-               title="Asset Allocation",
-               template='plotly_dark',
-               height=400,
-               paper_bgcolor='#161b22',
-               plot_bgcolor='#0b0e11',
-               showlegend=True
-           )
-           
-           st.plotly_chart(fig, use_container_width=True)
-       
-       with col2:
-           # Performance bar chart
-           fig = go.Figure(data=[
-               go.Bar(
-                   x=portfolio_df['Symbol'],
-                   y=portfolio_df['P&L %'],
-                   marker_color=['#00d68f' if x > 0 else '#ff3d71' for x in portfolio_df['P&L %']],
-                   text=portfolio_df['P&L %'].apply(lambda x: f"{x:+.1f}%"),
-                   textposition='outside'
-               )
-           ])
-           
-           fig.update_layout(
-               title="Position Performance",
-               xaxis_title="Symbol",
-               yaxis_title="P&L %",
-               template='plotly_dark',
-               height=400,
-               paper_bgcolor='#161b22',
-               plot_bgcolor='#0b0e11'
-           )
-           
-           st.plotly_chart(fig, use_container_width=True)
-       
-       # Remove position
-       st.markdown("### 🗑️ Remove Position")
-       symbol_to_remove = st.selectbox("Select position to remove", list(st.session_state.portfolio.keys()))
-       if st.button("Remove Position"):
-           del st.session_state.portfolio[symbol_to_remove]
-           st.success(f"Removed {symbol_to_remove} from portfolio")
-           st.rerun()
-   else:
-       st.info("Your portfolio is empty. Add positions to start tracking performance.")
+    st.markdown("### 💼 Professional Portfolio Tracker")
+    
+    # Check if enhanced portfolio manager is available
+    if PORTFOLIO_MANAGER_AVAILABLE:
+        # Get portfolio summary
+        portfolio_summary = portfolio_manager.get_portfolio_summary()
+        
+        # Portfolio management tabs
+        port_tabs = st.tabs(["📊 Overview", "➕ Add Position", "📈 Holdings", "📋 Transactions", "⚙️ Settings"])
+        
+        # ================== OVERVIEW TAB ==================
+        with port_tabs[0]:
+            if portfolio_summary['positions_count'] > 0:
+                # Key metrics row
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric(
+                        "Portfolio Value", 
+                        format_currency(portfolio_summary['current_value']),
+                        format_currency(portfolio_summary['total_pnl'])
+                    )
+                
+                with col2:
+                    pnl_color = "normal" if portfolio_summary['total_pnl'] == 0 else ("inverse" if portfolio_summary['total_pnl'] < 0 else "normal")
+                    st.metric(
+                        "Total P&L", 
+                        format_currency(abs(portfolio_summary['total_pnl'])),
+                        format_percentage(portfolio_summary['total_pnl_percent']),
+                        delta_color=pnl_color
+                    )
+                
+                with col3:
+                    st.metric(
+                        "Total Invested", 
+                        format_currency(portfolio_summary['total_invested'])
+                    )
+                
+                with col4:
+                    st.metric(
+                        "Positions", 
+                        str(portfolio_summary['positions_count'])
+                    )
+                
+                st.markdown("---")
+                
+                # Performance highlights
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("#### 🚀 Top Gainers")
+                    if portfolio_summary['top_gainers']:
+                        for position in portfolio_summary['top_gainers']:
+                            pnl_color = get_color_for_pnl(position['pnl'])
+                            st.markdown(f"""
+                            <div style="padding: 10px; margin: 5px 0; border-left: 3px solid {pnl_color}; background: rgba(255,255,255,0.05);">
+                                <strong>{position['symbol']}</strong><br>
+                                <span style="color: {pnl_color};">{format_percentage(position['pnl_percent'])}</span> • {format_currency(position['pnl'])}
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.info("No positions yet")
+                
+                with col2:
+                    st.markdown("#### 📉 Top Losers")
+                    if portfolio_summary['top_losers']:
+                        for position in portfolio_summary['top_losers']:
+                            pnl_color = get_color_for_pnl(position['pnl'])
+                            st.markdown(f"""
+                            <div style="padding: 10px; margin: 5px 0; border-left: 3px solid {pnl_color}; background: rgba(255,255,255,0.05);">
+                                <strong>{position['symbol']}</strong><br>
+                                <span style="color: {pnl_color};">{format_percentage(position['pnl_percent'])}</span> • {format_currency(position['pnl'])}
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.info("No losing positions")
+                
+                # Portfolio allocation pie chart
+                allocation = portfolio_manager.get_allocation_by_value()
+                if allocation:
+                    st.markdown("#### 📊 Portfolio Allocation")
+                    
+                    fig = go.Figure(data=[go.Pie(
+                        labels=list(allocation.keys()),
+                        values=list(allocation.values()),
+                        hole=0.4,
+                        marker=dict(colors=px.colors.qualitative.Set3)
+                    )])
+                    
+                    fig.update_layout(
+                        template='plotly_dark',
+                        height=400,
+                        paper_bgcolor='rgba(0,0,0,0)',
+                        plot_bgcolor='rgba(0,0,0,0)',
+                        showlegend=True
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+            else:
+                st.info("🎯 Start building your portfolio by adding your first position!")
+                st.markdown("""
+                **Get started:**
+                1. Click on the **Add Position** tab
+                2. Enter your stock symbol, shares, and purchase price
+                3. Track your performance in real-time
+                """)
+        
+        # ================== ADD POSITION TAB ==================
+        with port_tabs[1]:
+            st.markdown("#### ➕ Add New Position")
+            
+            with st.form("add_position_form"):
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    symbol = st.text_input("Stock Symbol", placeholder="e.g., AAPL").upper()
+                
+                with col2:
+                    shares = st.number_input("Number of Shares", min_value=0.001, step=1.0, format="%.3f")
+                
+                with col3:
+                    price = st.number_input("Purchase Price ($)", min_value=0.01, step=0.01, format="%.2f")
+                
+                with col4:
+                    purchase_date = st.date_input("Purchase Date", value=date.today())
+                
+                notes = st.text_area("Notes (optional)", placeholder="Enter any notes about this position...")
+                
+                col1, col2, col3 = st.columns([1, 1, 2])
+                with col2:
+                    submitted = st.form_submit_button("💼 Add Position", use_container_width=True)
+                
+                if submitted and symbol and shares > 0 and price > 0:
+                    success = portfolio_manager.add_position(
+                        symbol=symbol,
+                        shares=shares,
+                        price=price,
+                        purchase_date=purchase_date.strftime("%Y-%m-%d"),
+                        notes=notes
+                    )
+                    
+                    if success:
+                        st.success(f"✅ Successfully added {shares} shares of {symbol} to your portfolio!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to add position. Please try again.")
+        
+        # ================== HOLDINGS TAB ==================
+        with port_tabs[2]:
+            st.markdown("#### 📈 Portfolio Holdings")
+            
+            portfolio_df = portfolio_manager.get_portfolio_dataframe()
+            
+            if not portfolio_df.empty:
+                # Real-time refresh button
+                col1, col2, col3 = st.columns([1, 1, 2])
+                with col1:
+                    if st.button("🔄 Refresh Prices", use_container_width=True):
+                        st.rerun()
+                
+                # Holdings table with enhanced formatting
+                st.dataframe(
+                    portfolio_df.style.format({
+                        'shares': '{:.2f}',
+                        'avg_cost': '${:.2f}',
+                        'current_price': '${:.2f}',
+                        'position_value': '${:,.2f}',
+                        'position_cost': '${:,.2f}',
+                        'pnl': '${:+,.2f}',
+                        'pnl_percent': '{:+.2f}%'
+                    }).apply(lambda x: [
+                        'background-color: rgba(0, 255, 0, 0.1)' if val > 0 
+                        else 'background-color: rgba(255, 0, 0, 0.1)' if val < 0
+                        else ''
+                        for val in x
+                    ] if x.name == 'pnl' else [''] * len(x), axis=1),
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                # Position management
+                st.markdown("#### 🔧 Manage Positions")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**Sell/Reduce Position**")
+                    symbols = list(portfolio_df['symbol'])
+                    selected_symbol = st.selectbox("Select position", symbols, key="sell_symbol")
+                    
+                    if selected_symbol:
+                        current_shares = portfolio_df[portfolio_df['symbol'] == selected_symbol]['shares'].iloc[0]
+                        shares_to_sell = st.number_input(
+                            f"Shares to sell (max: {current_shares})", 
+                            min_value=0.001, 
+                            max_value=float(current_shares), 
+                            step=1.0,
+                            key="sell_shares"
+                        )
+                        
+                        if st.button("📤 Sell Shares", key="sell_button"):
+                            success = portfolio_manager.remove_position(selected_symbol, shares_to_sell)
+                            if success:
+                                st.success(f"✅ Sold {shares_to_sell} shares of {selected_symbol}")
+                                st.rerun()
+                            else:
+                                st.error("❌ Failed to sell shares")
+                
+                with col2:
+                    st.markdown("**Remove Entire Position**")
+                    symbol_to_remove = st.selectbox("Select position to remove", symbols, key="remove_symbol")
+                    
+                    if st.button("🗑️ Remove Position", key="remove_button"):
+                        success = portfolio_manager.remove_position(symbol_to_remove)
+                        if success:
+                            st.success(f"✅ Removed {symbol_to_remove} from portfolio")
+                            st.rerun()
+                        else:
+                            st.error("❌ Failed to remove position")
+                
+            else:
+                st.info("No positions in portfolio. Add some positions to get started!")
+        
+        # ================== TRANSACTIONS TAB ==================
+        with port_tabs[3]:
+            st.markdown("#### 📋 Transaction History")
+            st.info("Transaction history feature coming soon!")
+            
+            # Export functionality
+            st.markdown("#### 📁 Export Portfolio")
+            col1, col2, col3 = st.columns([1, 1, 2])
+            
+            with col1:
+                if st.button("📊 Export to CSV", use_container_width=True):
+                    filename = portfolio_manager.export_portfolio()
+                    if filename:
+                        st.success(f"✅ Portfolio exported to {filename}")
+                    else:
+                        st.error("❌ Export failed - no positions to export")
+        
+        # ================== SETTINGS TAB ==================
+        with port_tabs[4]:
+            st.markdown("#### ⚙️ Portfolio Settings")
+            
+            st.markdown("**Data Management**")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                if st.button("🔄 Refresh All Prices", use_container_width=True):
+                    with st.spinner("Refreshing prices..."):
+                        portfolio_manager.get_current_prices()
+                    st.success("✅ Prices refreshed!")
+            
+            with col2:
+                if st.button("📊 Recalculate Portfolio", use_container_width=True):
+                    portfolio_summary = portfolio_manager.get_portfolio_summary()
+                    st.success("✅ Portfolio recalculated!")
+            
+            st.markdown("---")
+            st.markdown("**Portfolio Statistics**")
+            
+            if portfolio_summary['positions_count'] > 0:
+                stats_col1, stats_col2 = st.columns(2)
+                
+                with stats_col1:
+                    st.metric("Total Positions", portfolio_summary['positions_count'])
+                    st.metric("Total Invested", format_currency(portfolio_summary['total_invested']))
+                
+                with stats_col2:
+                    st.metric("Current Value", format_currency(portfolio_summary['current_value']))
+                    st.metric("Net P&L", format_currency(portfolio_summary['total_pnl']))
+    
+    else:
+        # Fallback to basic portfolio functionality
+        st.warning("⚠️ Enhanced Portfolio Manager not available. Using basic functionality.")
+        
+        # Initialize portfolio in session state
+        if 'portfolio' not in st.session_state:
+            st.session_state.portfolio = {}
+        
+        # Simple add position form
+        with st.expander("➕ Add Position"):
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                symbol = st.text_input("Symbol")
+            with col2:
+                shares = st.number_input("Shares", min_value=0.0, step=1.0)
+            with col3:
+                price = st.number_input("Price", min_value=0.0, step=0.01)
+            with col4:
+                if st.button("Add"):
+                    if symbol and shares > 0 and price > 0:
+                        st.session_state.portfolio[symbol.upper()] = {
+                            'shares': shares, 
+                            'avg_cost': price
+                        }
+                        st.success(f"Added {symbol}")
+                        st.rerun()
+        
+        # Simple portfolio display
+        if st.session_state.portfolio:
+            st.markdown("### Current Positions")
+            for symbol, data in st.session_state.portfolio.items():
+                st.write(f"**{symbol}**: {data['shares']} shares @ ${data['avg_cost']:.2f}")
+        else:
+            st.info("Portfolio is empty. Add positions to get started.")
 
 # ================== WATCHLIST TAB ==================
 with main_tabs[6]:
