@@ -10,7 +10,9 @@
       "Bash(py -m streamlit run:*)",
       "WebFetch(domain:github.com)",
       "Bash(npx -y @smithery/cli install @guangxiangdebizi/finance-mcp --client claude)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(py test_data_fetch.py)",
+      "Bash(py -m pip install:*)"
     ],
     "deny": [],
     "ask": []

@@ -17,8 +17,6 @@ import json
 import time
 from typing import Dict, List, Optional, Tuple, Any
 import warnings
-import asyncio
-import aiohttp
 warnings.filterwarnings('ignore')
 
 # ================== CONFIGURATION ==================
